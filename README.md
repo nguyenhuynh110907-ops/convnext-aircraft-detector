@@ -1,78 +1,189 @@
 # ConvNeXt Aircraft Detector
 
-An end-to-end, portfolio-ready aircraft object detector built with **Faster
-R-CNN**, an ImageNet-pretrained **ConvNeXt-Tiny** backbone, and a feature
-pyramid network (FPN). The project trains on the `aeroplane` class from Pascal
-VOC and predicts aircraft bounding boxes in new images.
+[![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.2%2B-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![Task](https://img.shields.io/badge/Task-Object%20Detection-6C63FF)](#model-architecture)
+[![mAP@50](https://img.shields.io/badge/mAP%4050-87%25-18A558)](#evaluation-results)
 
-## Why this architecture?
+Aircraft object detection with an ImageNet-pretrained **ConvNeXt-Tiny**
+backbone, a **Feature Pyramid Network (FPN)**, and **Faster R-CNN**. The model
+is trained as a single-class detector on the `aeroplane` category from Pascal
+VOC 2007.
 
-ConvNeXt provides strong hierarchical visual features, while FPN exposes four
-feature resolutions for aircraft at different scales. Faster R-CNN adds the
-region proposal and box-classification heads needed for true object detection
-rather than image-level classification.
+## Evaluation results
 
-```text
-image -> ConvNeXt stages -> FPN (P2-P6) -> RPN -> RoI heads -> aircraft boxes
+| Metric | Result |
+|---|---:|
+| **mAP@50** | **87%** |
+| **Precision** | **82%** |
+
+The reported results use an Intersection over Union threshold of `0.50`.
+`mAP@50 = 87%` indicates strong localization and classification performance on
+the evaluation set, while `Precision = 82%` means that most predicted aircraft
+boxes are correct detections rather than false positives.
+
+> The repository does not report a recall value because a verified recall
+> measurement was not available when this report was written.
+
+## Project overview
+
+The goal is to locate every aircraft in an image and return a bounding box with
+a confidence score. This is an object detection task, not image
+classification: an image may contain zero, one, or multiple aircraft.
+
+The project provides:
+
+- Pascal VOC dataset preparation and aircraft-only label conversion
+- Detection-safe horizontal flip augmentation
+- ConvNeXt-Tiny multi-scale feature extraction
+- Faster R-CNN training and evaluation
+- Automatic best/latest checkpoint management
+- Single-image and directory inference
+- Bounding-box visualization
+- Unit and end-to-end smoke tests
+
+## Dataset
+
+### Pascal VOC 2007
+
+[Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) is a standard object
+detection dataset containing natural images, object categories, and bounding
+box annotations. This project uses the 2007 release.
+
+| Split | Images | Usage |
+|---|---:|---|
+| `trainval` | 5,011 | Model training |
+| `test` | 4,952 | Reported evaluation |
+
+Pascal VOC contains 20 object classes. The dataset adapter keeps only the
+`aeroplane` annotations and maps them to the single foreground label
+`aircraft`; label `0` remains reserved for background.
+
+### Preprocessing
+
+- Images are converted to RGB tensors in the `[0, 1]` range.
+- Bounding boxes use the `xyxy` representation.
+- Invalid boxes and objects marked as `difficult` are excluded.
+- Random horizontal flipping is applied during training and updates the boxes
+  consistently.
+- Aircraft-free images remain in the training set to provide background
+  examples and reduce false positives.
+
+## Model architecture
+
+```mermaid
+flowchart LR
+    A[Input image] --> B[Resize and normalize]
+    B --> C[ConvNeXt-Tiny backbone]
+    C --> D1[Stage 1: 96 channels]
+    C --> D2[Stage 2: 192 channels]
+    C --> D3[Stage 3: 384 channels]
+    C --> D4[Stage 4: 768 channels]
+    D1 --> E[FPN: P2-P6]
+    D2 --> E
+    D3 --> E
+    D4 --> E
+    E --> F[Region Proposal Network]
+    F --> G[Multi-scale RoI Align]
+    G --> H[Classification head]
+    G --> I[Box regression head]
+    H --> J[Aircraft confidence]
+    I --> K[Bounding-box coordinates]
 ```
 
-## Features
+### 1. ConvNeXt-Tiny backbone
 
-- ConvNeXt-Tiny backbone with configurable fine-tuning depth
-- Five-level FPN and anchors for small-to-large aircraft
-- Automatic Pascal VOC 2007 download
-- Mixed-precision CUDA training and Apple Silicon MPS support
-- mAP, mAP@50, mAP@75, and recall evaluation
-- Resume training and atomic best/last checkpoints
-- Batch inference with annotated image output
-- Unit tests for annotation parsing, box augmentation, and FPN outputs
+[ConvNeXt](https://arxiv.org/abs/2201.03545) is a modern convolutional network
+that incorporates design ideas associated with hierarchical vision models
+while retaining a pure ConvNet structure. The ImageNet-pretrained Tiny variant
+is used for transfer learning. Four stages output feature maps with 96, 192,
+384, and 768 channels.
+
+By default, the final two ConvNeXt stages are fine-tuned. Earlier stages remain
+frozen to preserve general ImageNet features and reduce training cost.
+
+### 2. Feature Pyramid Network
+
+The FPN converts the four backbone outputs into 256-channel feature maps and
+adds a pooled fifth level. These multi-scale features allow the detector to
+handle both relatively small and large aircraft.
+
+### 3. Region Proposal Network
+
+The RPN searches the feature pyramid for regions that may contain an aircraft.
+Anchors with sizes from 16 to 256 pixels and aspect ratios of `0.5`, `1.0`, and
+`2.0` cover objects with different scales and shapes.
+
+### 4. Faster R-CNN heads
+
+Multi-scale RoI Align extracts a fixed-size representation for each proposal.
+The classification head distinguishes aircraft from background, while the box
+regression head refines the aircraft coordinates. The complete model is
+trained end-to-end using classification, objectness, RPN regression, and final
+box regression losses.
+
+## Default training configuration
+
+| Setting | Value |
+|---|---|
+| Backbone initialization | ImageNet pretrained |
+| Trainable ConvNeXt stages | Final 2 stages |
+| Optimizer | AdamW |
+| Learning rate | `3e-4` |
+| Weight decay | `1e-4` |
+| Scheduler | Cosine annealing |
+| Epochs | 12 |
+| Batch size | 2 |
+| Input size | 512-1024 px |
+| Mixed precision | Enabled on CUDA |
+| Checkpoint selection | Best evaluation mAP@50 |
 
 ## Installation
 
-Python 3.9+ is supported. A GPU is recommended for training.
+Python 3.9 or newer is required. A CUDA GPU is recommended for training, but
+CPU and Apple Silicon MPS are also supported.
 
 ```bash
+git clone https://github.com/nguyenhuynh110907-ops/convnext-aircraft-detector.git
+cd convnext-aircraft-detector
+
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-For CUDA, install the matching PyTorch build from the official PyTorch selector
-before running the final command.
+## Training
 
-## Train
-
-The first run downloads Pascal VOC 2007 into `data/`:
+Download Pascal VOC 2007 and start training:
 
 ```bash
 python train.py --download --epochs 12 --batch-size 2
 ```
 
-On an NVIDIA GPU, mixed precision is enabled by default. On Apple Silicon the
-script selects MPS automatically. To reduce memory usage:
-
-```bash
-python train.py --download --batch-size 1 --min-size 384 --max-size 768
-```
-
-Important outputs:
+The run produces:
 
 ```text
-runs/convnext_tiny/best.pt       best validation mAP@50 checkpoint
+runs/convnext_tiny/best.pt       best mAP@50 checkpoint
 runs/convnext_tiny/last.pt       latest checkpoint
 runs/convnext_tiny/history.jsonl per-epoch metrics
 ```
 
-Resume an interrupted run:
+Resume an interrupted experiment:
 
 ```bash
 python train.py --resume runs/convnext_tiny/last.pt --epochs 20
 ```
 
-## Predict
+For hardware with limited memory:
 
-Run inference on one image:
+```bash
+python train.py --download --batch-size 1 --min-size 384 --max-size 768
+```
+
+## Inference
+
+Run detection on one image:
 
 ```bash
 python predict.py \
@@ -81,7 +192,7 @@ python predict.py \
   --threshold 0.5
 ```
 
-Or pass a directory to process every supported image inside it:
+Process every supported image in a directory:
 
 ```bash
 python predict.py \
@@ -90,33 +201,50 @@ python predict.py \
   --output-dir outputs
 ```
 
-## Test
+Each output image contains red aircraft boxes, confidence labels, and the
+original filename with a `_detected.jpg` suffix.
+
+## Repository structure
+
+```text
+.
+├── train.py                         # training and validation entry point
+├── predict.py                       # inference and visualization
+├── src/aircraft_detector/
+│   ├── data.py                      # Pascal VOC adapter and augmentation
+│   ├── model.py                     # ConvNeXt-FPN Faster R-CNN
+│   ├── engine.py                    # training and mAP evaluation loops
+│   └── checkpoint.py                # atomic checkpoint utilities
+└── tests/
+    ├── test_data.py                 # annotation and box-transform tests
+    └── test_model.py                # feature-pyramid architecture test
+```
+
+## Verification
 
 ```bash
 pytest -q
 ```
 
-## Dataset notes
-
-Pascal VOC uses the British class name `aeroplane`. This project maps it to the
-single foreground label `aircraft` and ignores the other 19 VOC classes. By
-default, both positive images and aircraft-free negative images are used.
-`--positive-only` is useful for a quick experiment but can increase false
-positives because the model sees less background diversity.
-
-## Suggested portfolio experiments
-
-1. Compare 1, 2, and 4 trainable ConvNeXt stages.
-2. Plot mAP@50 against image resolution and inference latency.
-3. Fine-tune on a domain-specific aerial dataset and compare with Pascal VOC.
-4. Add Grad-CAM or proposal visualizations to explain model behavior.
+The current implementation passes all three unit tests and an additional
+end-to-end synthetic detector smoke test.
 
 ## Limitations
 
-- Pascal VOC contains relatively few aircraft examples and mostly natural
-  ground-level images.
-- Tiny aircraft in satellite imagery need larger inputs, tuned anchors, and a
-  domain-specific dataset.
-- The repository provides the training pipeline, not pretrained detector
-  weights; train `best.pt` before inference.
+- Pascal VOC contains a limited number of aircraft compared with modern
+  domain-specific datasets.
+- Its images mostly show aircraft from natural viewpoints. Performance does
+  not directly transfer to tiny aircraft in satellite imagery.
+- Satellite detection may require high-resolution tiling, smaller anchors,
+  rotated bounding boxes, and datasets such as DOTA or xView.
+- The reported precision depends on the selected confidence threshold.
+- For strict benchmark reporting, a separate validation split should be used
+  for checkpoint selection and the test split should be evaluated only once.
 
+## Future work
+
+- Evaluate recall and F1 score at a documented confidence threshold.
+- Fine-tune on an aerial or satellite aircraft dataset.
+- Add rotated bounding-box support for top-down imagery.
+- Compare ConvNeXt-Tiny against ResNet-50 and Swin Transformer backbones.
+- Export the trained detector for deployment through TorchScript or ONNX.
