@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "convnext-aircraft-detector"
+version = "0.1.0"
+description = "Aircraft object detection with a ConvNeXt-Tiny FPN backbone and Faster R-CNN"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "torch>=2.2,<3",
+  "torchvision>=0.17,<1",
+  "torchmetrics[detection]>=1.3,<2",
+  "Pillow>=10,<13",
+  "tqdm>=4.66,<5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
