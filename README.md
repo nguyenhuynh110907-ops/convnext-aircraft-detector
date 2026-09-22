@@ -46,7 +46,7 @@ The project provides:
 
 ### Pascal VOC 2007
 
-[Pascal VOC](http://host.robots.ox.ac.uk/pascal/VOC/) is a standard object
+[Pascal VOC](https://www.robots.ox.ac.uk/~vgg/projects/pascal/VOC/voc2007/) is a standard object
 detection dataset containing natural images, object categories, and bounding
 box annotations. This project uses the 2007 release.
 
@@ -68,6 +68,26 @@ Pascal VOC contains 20 object classes. The dataset adapter keeps only the
   consistently.
 - Aircraft-free images remain in the training set to provide background
   examples and reduce false positives.
+
+### Ground-truth bounding box examples
+
+The pink boxes below come from the original **Pascal VOC 2007 trainval XML
+labels**. They show the annotated aircraft in the dataset; they are not model
+predictions or examples used to calculate the reported mAP.
+
+| One aircraft (`000117`) | Three aircraft (`000033`) |
+|:---:|:---:|
+| ![One aircraft taking off with its VOC ground-truth box](assets/ground_truth/000117_gt.jpg) | ![Three aircraft at an airport with VOC ground-truth boxes](assets/ground_truth/000033_gt.jpg) |
+
+| Five aircraft (`000936`) | Six aircraft (`007152`) |
+|:---:|:---:|
+| ![Five aircraft in the sky with VOC ground-truth boxes](assets/ground_truth/000936_gt.jpg) | ![Six aircraft in formation with VOC ground-truth boxes](assets/ground_truth/007152_gt.jpg) |
+
+To reproduce these images from a local copy of VOC 2007:
+
+```bash
+python scripts/render_voc_labels.py 000117 000033 000936 007152
+```
 
 ## Model architecture
 
@@ -210,6 +230,8 @@ original filename with a `_detected.jpg` suffix.
 .
 ├── train.py                         # training and validation entry point
 ├── predict.py                       # inference and visualization
+├── scripts/render_voc_labels.py     # draw ground-truth VOC boxes
+├── assets/ground_truth/             # four annotated dataset samples
 ├── src/aircraft_detector/
 │   ├── data.py                      # Pascal VOC adapter and augmentation
 │   ├── model.py                     # ConvNeXt-FPN Faster R-CNN
